@@ -14,10 +14,12 @@ public class GameManager : MonoBehaviour
     private MultiplayerConnection _connection;
     private List<PlayerEntity> _players = new List<PlayerEntity>();
     private GameObject _localPlayer;
+    private Rigidbody _localRigidbody;
 
     private async void Start()
     {
         _localPlayer = Instantiate(_playerPrefab);
+        _localRigidbody = _localPlayer.GetComponent<Rigidbody>();
         _connection = new MultiplayerConnection();
         await _connection.Connect("127.0.0.1", 8080);
 
@@ -49,8 +51,30 @@ public class GameManager : MonoBehaviour
             var syncPlayer = worldState.Players.First(player => player.Id == newPlayerId);
             await MainThreadDispatcher.RunOnMainThreadAsync(() =>
             {
-                var createdGameObject = Instantiate(_otherPlayerPrefab);
-                _players.Add(new PlayerEntity(createdGameObject, newPlayerId, new UnityEngine.Vector3 { x = syncPlayer.Position.X, y = syncPlayer.Position.Y, z = syncPlayer.Position.Z }));
+                var createdGameObject = Instantiate(
+                    _otherPlayerPrefab,
+                    new UnityEngine.Vector3
+                    {
+                        x = syncPlayer.Position.X,
+                        y = syncPlayer.Position.Y,
+                        z = syncPlayer.Position.Z
+                    },
+                    Quaternion.identity);
+                _players.Add(new PlayerEntity(
+                    createdGameObject,
+                    newPlayerId,
+                    new UnityEngine.Vector3
+                    {
+                        x = syncPlayer.Position.X,
+                        y = syncPlayer.Position.Y,
+                        z = syncPlayer.Position.Z
+                    },
+                    new UnityEngine.Vector3
+                    {
+                        x = syncPlayer.Velocity.X,
+                        y = syncPlayer.Velocity.Y,
+                        z = syncPlayer.Velocity.Z
+                    }));
                 Debug.Log($"Добавлен игрок {newPlayerId}");
             });
         }
@@ -74,16 +98,19 @@ public class GameManager : MonoBehaviour
         {
             var syncPlayer = worldState.Players.First(player => player.Id == existingPlayerId);
             var player = _players.First(player => player.Id == existingPlayerId);
-            player.Position = new UnityEngine.Vector3
-            {
-                x = syncPlayer.Position.X,
-                y = syncPlayer.Position.Y,
-                z = syncPlayer.Position.Z
-            };
-            MainThreadDispatcher.RunOnMainThread(() =>
-            {
-                player.Player.SetPosition(player.Position.x, player.Position.y, player.Position.z);
-            });
+            player.OtherPlayerInput.OnReceivePosition(
+                new UnityEngine.Vector3
+                {
+                    x = syncPlayer.Position.X,
+                    y = syncPlayer.Position.Y,
+                    z = syncPlayer.Position.Z
+                },
+                new UnityEngine.Vector3
+                {
+                    x = syncPlayer.Velocity.X,
+                    y = syncPlayer.Velocity.Y,
+                    z = syncPlayer.Velocity.Z
+                });
         }
     }
 
@@ -108,6 +135,12 @@ public class GameManager : MonoBehaviour
                     X = _localPlayer.transform.position.x,
                     Y = _localPlayer.transform.position.y,
                     Z = _localPlayer.transform.position.z
+                },
+                Velocity = new MultiplayerConsole.Multiplayer.Vector3
+                {
+                    X = _localRigidbody.velocity.x,
+                    Y = _localRigidbody.velocity.y,
+                    Z = _localRigidbody.velocity.z
                 }
             })));
             yield return new WaitForSeconds(0.1f);
